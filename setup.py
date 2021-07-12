@@ -291,7 +291,7 @@ if "--deprecated_fused_lamb" in sys.argv:
                                               'nvcc':['-O3',
                                                       '--use_fast_math'] + version_dependent_macros}))
 
-# Check, if ATen/CUDAGenerator.h is found, otherwise use the new ATen/CUDAGeneratorImpl.h, due to breaking change in https://github.com/pytorch/pytorch/pull/36026 
+# Check, if ATen/CUDAGenerator.h is found, otherwise use the new ATen/CUDAGeneratorImpl.h, due to breaking change in https://github.com/pytorch/pytorch/pull/36026
 generator_flag = []
 torch_dir = torch.__path__[0]
 if os.path.exists(os.path.join(torch_dir, 'include', 'ATen', 'CUDAGenerator.h')):
@@ -329,6 +329,48 @@ if "--fast_layer_norm" in sys.argv:
                                                       '--expt-relaxed-constexpr',
                                                       '--expt-extended-lambda',
                                                       '--use_fast_math'] + version_dependent_macros + generator_flag + cc_flag}))
+if "--fmha" in sys.argv:
+    from torch.utils.cpp_extension import CUDAExtension
+    sys.argv.remove("--fmha")
+
+    from torch.utils.cpp_extension import BuildExtension
+    cmdclass['build_ext'] = BuildExtension.with_options(use_ninja=False)
+
+    if torch.utils.cpp_extension.CUDA_HOME is None:
+        raise RuntimeError("--fmha was requested, but nvcc was not found.  Are you sure your environment has nvcc available?  If you're installing within a container from https://hub.docker.com/r/pytorch/pytorch, only images whose names contain 'devel' will provide nvcc.")
+    else:
+        # Check, if CUDA11 is installed for compute capability 8.0
+        cc_flag = []
+        _, bare_metal_major, _ = get_cuda_bare_metal_version(cpp_extension.CUDA_HOME)
+        if int(bare_metal_major) < 11:
+            raise RuntimeError("--fmha only supported on SM80")
+
+        ext_modules.append(
+            CUDAExtension(name='fmhalib',
+                          sources=[
+                                   'apex/contrib/csrc/fmha/fmha_api.cpp',
+                                   'apex/contrib/csrc/fmha/src/fmha_fprop_fp16_128_64_kernel.sm80.cu',
+                                   'apex/contrib/csrc/fmha/src/fmha_fprop_fp16_256_64_kernel.sm80.cu',
+                                   'apex/contrib/csrc/fmha/src/fmha_fprop_fp16_384_64_kernel.sm80.cu',
+                                   'apex/contrib/csrc/fmha/src/fmha_fprop_fp16_512_64_kernel.sm80.cu',
+                                   'apex/contrib/csrc/fmha/src/fmha_dgrad_fp16_128_64_kernel.sm80.cu',
+                                   'apex/contrib/csrc/fmha/src/fmha_dgrad_fp16_256_64_kernel.sm80.cu',
+                                   'apex/contrib/csrc/fmha/src/fmha_dgrad_fp16_384_64_kernel.sm80.cu',
+                                   'apex/contrib/csrc/fmha/src/fmha_dgrad_fp16_512_64_kernel.sm80.cu',
+                                   ],
+                          extra_compile_args={'cxx': ['-O3',
+                                                      '-I./apex/contrib/csrc/fmha/src',
+                                                      ] + version_dependent_macros + generator_flag,
+                                              'nvcc':['-O3',
+                                                      '-gencode', 'arch=compute_80,code=sm_80',
+                                                      '-U__CUDA_NO_HALF_OPERATORS__',
+                                                      '-U__CUDA_NO_HALF_CONVERSIONS__',
+                                                      '-I./apex/contrib/csrc/',
+                                                      '-I./apex/contrib/csrc/fmha/src',
+                                                      '--expt-relaxed-constexpr',
+                                                      '--expt-extended-lambda',
+                                                      '--use_fast_math'] + version_dependent_macros + generator_flag + cc_flag}))
+
 
 if "--fast_multihead_attn" in sys.argv:
     from torch.utils.cpp_extension import CUDAExtension
@@ -452,6 +494,48 @@ if "--fast_multihead_attn" in sys.argv:
                                                       '--expt-relaxed-constexpr',
                                                       '--expt-extended-lambda',
                                                       '--use_fast_math'] + version_dependent_macros + generator_flag + cc_flag}))
+
+if "--transducer" in sys.argv:
+    from torch.utils.cpp_extension import CUDAExtension
+    sys.argv.remove("--transducer")
+
+    from torch.utils.cpp_extension import BuildExtension
+    cmdclass['build_ext'] = BuildExtension.with_options(use_ninja=False)
+
+    if torch.utils.cpp_extension.CUDA_HOME is None:
+        raise RuntimeError("--transducer was requested, but nvcc was not found.  Are you sure your environment has nvcc available?  If you're installing within a container from https://hub.docker.com/r/pytorch/pytorch, only images whose names contain 'devel' will provide nvcc.")
+    else:
+        ext_modules.append(
+            CUDAExtension(name='transducer_joint_cuda',
+                          sources=['apex/contrib/csrc/transducer/transducer_joint.cpp',
+                                   'apex/contrib/csrc/transducer/transducer_joint_kernel.cu'],
+                          include_dirs=[os.path.join(this_dir, 'csrc')],
+                          extra_compile_args={'cxx': ['-O3'] + version_dependent_macros,
+                                              'nvcc':['-O3'] + version_dependent_macros}))
+        ext_modules.append(
+            CUDAExtension(name='transducer_loss_cuda',
+                          sources=['apex/contrib/csrc/transducer/transducer_loss.cpp',
+                                   'apex/contrib/csrc/transducer/transducer_loss_kernel.cu'],
+                          include_dirs=[os.path.join(this_dir, 'csrc')],
+                          extra_compile_args={'cxx': ['-O3'] + version_dependent_macros,
+                                              'nvcc':['-O3'] + version_dependent_macros}))
+
+if "--fast_bottleneck" in sys.argv:
+    from torch.utils.cpp_extension import CUDAExtension
+    sys.argv.remove("--fast_bottleneck")
+
+    from torch.utils.cpp_extension import BuildExtension
+    cmdclass['build_ext'] = BuildExtension.with_options(use_ninja=False)
+
+    if torch.utils.cpp_extension.CUDA_HOME is None:
+        raise RuntimeError("--fast_bottleneck was requested, but nvcc was not found.  Are you sure your environment has nvcc available?  If you're installing within a container from https://hub.docker.com/r/pytorch/pytorch, only images whose names contain 'devel' will provide nvcc.")
+    else:
+        subprocess.run(["git", "submodule", "update", "--init", "apex/contrib/csrc/cudnn-frontend/"])
+        ext_modules.append(
+            CUDAExtension(name='fast_bottleneck',
+                          sources=['apex/contrib/csrc/bottleneck/bottleneck.cpp'],
+                          include_dirs=['apex/contrib/csrc/cudnn-frontend/include'],
+                          extra_compile_args={'cxx': ['-O3',] + version_dependent_macros + generator_flag}))
 
 setup(
     name='apex',
