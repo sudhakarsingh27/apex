@@ -349,6 +349,7 @@ if "--fmha" in sys.argv:
             CUDAExtension(name='fmhalib',
                           sources=[
                                    'apex/contrib/csrc/fmha/fmha_api.cpp',
+                                   'apex/contrib/csrc/fmha/src/fmha_noloop_reduce.cu',
                                    'apex/contrib/csrc/fmha/src/fmha_fprop_fp16_128_64_kernel.sm80.cu',
                                    'apex/contrib/csrc/fmha/src/fmha_fprop_fp16_256_64_kernel.sm80.cu',
                                    'apex/contrib/csrc/fmha/src/fmha_fprop_fp16_384_64_kernel.sm80.cu',
@@ -511,7 +512,8 @@ if "--transducer" in sys.argv:
                                    'apex/contrib/csrc/transducer/transducer_joint_kernel.cu'],
                           include_dirs=[os.path.join(this_dir, 'csrc')],
                           extra_compile_args={'cxx': ['-O3'] + version_dependent_macros,
-                                              'nvcc':['-O3'] + version_dependent_macros}))
+                                              'nvcc':['-O3',
+                                                      '-I./apex/contrib/csrc/multihead_attn/'] + version_dependent_macros}))
         ext_modules.append(
             CUDAExtension(name='transducer_loss_cuda',
                           sources=['apex/contrib/csrc/transducer/transducer_loss.cpp',
